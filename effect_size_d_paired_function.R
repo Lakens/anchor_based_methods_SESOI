@@ -201,8 +201,8 @@ effect_size_d_paired <- function (x, y, conf.level = 0.95){
   d_z <- t_value/sqrt(N)
   d_z
   d_z_unb <- (1-(3/(4*(N-1)-1)))*d_z
-  ci_l_d_z <- nct_limits$Lower.Limit/sqrt(N-1)
-  ci_u_d_z <- nct_limits$Upper.Limit/sqrt(N-1)
+  ci_l_d_z <- nct_limits$Lower.Limit/sqrt(N)
+  ci_u_d_z <- nct_limits$Upper.Limit/sqrt(N)
   ci_l_d_z
   ci_u_d_z
 
