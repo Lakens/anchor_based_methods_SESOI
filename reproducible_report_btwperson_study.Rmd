@@ -64,7 +64,7 @@ source("effect_size_d_paired_function.R")
 # PANASdata$StudentID <- c(1:nrow(PANASdata))
 # 
 # #Then write the csv file
-# write.csv2(PANASdata, file = "PANAS_study2_data_anon.csv", row.names = FALSE)
+# write.csv2(PANASdata, file = "PANAS_btwperson_data_anon.csv", row.names = FALSE)
 
 ```
 
@@ -73,7 +73,7 @@ source("effect_size_d_paired_function.R")
 
 ```{r read_data}
 # Read in data----
-PANASdata <- read.csv2(file('PANAS_study2_data_anon.csv'), stringsAsFactors = FALSE)
+PANASdata <- read.csv2(file('PANAS_btwperson_data_anon.csv'), stringsAsFactors = FALSE)
 
 #remove any observations with NA values
 PANASdata <- PANASdata[complete.cases(PANASdata), ]
