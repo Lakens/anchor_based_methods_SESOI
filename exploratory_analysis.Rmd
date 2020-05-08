@@ -1,0 +1,536 @@
+---
+title: "Descriptive Analyses SESOI PANAS"
+output:
+  html_document:
+    df_print: paged
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, include=FALSE}
+##Load libraries and data
+
+library('plyr')
+library("effsize")
+library('ggplot2')
+library('dplyr')
+library('metafor')
+library('reshape2') 
+library('gridExtra')
+library('ggridges')
+
+PANASdata <- read.csv(file('PANAS_total_analysis_data.csv'), stringsAsFactors = FALSE)
+# View(PANASdata)
+# assuming all data have been read in with only complete cases (N = 775) remaining----
+# THE PRE-REGISTERED SCRIPT----
+
+#Added a dedicated function to perform all these calculations - DL ----
+source("effect_size_d_paired_function.R")
+
+#using subsetting to calculate mean of T1 and T2 PA and NA for each participant
+PANASdata$T1_PA <- rowMeans(PANASdata[ , grep('T1_PA', colnames(PANASdata))], na.rm=TRUE)
+PANASdata$T1_NA <- rowMeans(PANASdata[ , grep('T1_NA', colnames(PANASdata))], na.rm=TRUE)
+PANASdata$T2_PA <- rowMeans(PANASdata[ , grep('T2_PA', colnames(PANASdata))], na.rm=TRUE)
+PANASdata$T2_NA <- rowMeans(PANASdata[ , grep('T2_NA', colnames(PANASdata))], na.rm=TRUE)
+
+#calculate difference score, from T1 to T2, for PA and NA for each participant
+PANASdata$PA_change <- PANASdata$T2_PA - PANASdata$T1_PA
+PANASdata$NA_change <- PANASdata$T2_NA - PANASdata$T1_NA
+
+
+#plot raw data
+ggplot(PANASdata, aes(x = PA_change, y = as.factor(globalPA))) + 
+  geom_density_ridges(jittered_points = TRUE, position = "raincloud", alpha = 0.7) +
+  theme_ridges(center = TRUE) +
+  labs(
+    x = "Difference in Positive Affect",
+    y = "Answer on Global Change question",
+    title = "Change in Positive Effect per Anchor")
+
+ggplot(PANASdata, aes(x = NA_change, y = as.factor(globalNA))) + 
+  geom_density_ridges(jittered_points = TRUE, position = "raincloud", alpha = 0.7) +
+  theme_ridges(center = TRUE) +
+  labs(
+    x = "Difference in Negative Affect",
+    y = "Answer on Global Change question",
+    title = "Change in Negative Effect per Anchor")
+
+
+# Calculate all statistics for positive----
+# We first create an empty dataframe that stores all information we can compute
+
+sum_data<-data.frame(global_answer = numeric(0),
+                     t = numeric(0), 
+                     df = numeric(0), 
+                     p = numeric(0), 
+                     ci_lower_mean = numeric(0), 
+                     ci_upper_mean = numeric(0), 
+                     mean_1 = numeric(0), 
+                     mean_2 = numeric(0),
+                     m_diff = numeric(0),
+                     ci_l_m_diff = numeric(0),
+                     ci_u_m_diff = numeric(0),
+                     d_av = numeric(0),
+                     d_av_unb = numeric(0),
+                     s_av = numeric(0),
+                     s_diff = numeric(0),
+                     ci_l_d_av = numeric(0),
+                     ci_u_d_av = numeric(0),
+                     d_z = numeric(0),
+                     d_z_unb = numeric(0),
+                     ci_l_d_z = numeric(0),
+                     ci_u_d_z = numeric(0),
+                     N = numeric(0),
+                     m1 = numeric(0),
+                     m2 = numeric(0),
+                     sd1 = numeric(0),
+                     sd2 = numeric(0),
+                     cor = numeric(0),
+                     vi = numeric(0))
+# Then we perform calculations for each subgroup (who report 1-5 on the global anchor, for positive affect)
+# We perform a t-test and store the results as temp, then add these to sum_data
+# Then we use a custom function to calculate effect sizes and CI for paired t-tests, and save as temp, and add those to sum_data
+
+for(i in 1:5){
+  temp <- t.test(PANASdata$PA_change[PANASdata$globalPA == i])
+  sum_data[i,1] <- i
+  sum_data[i,2] <- temp$statistic
+  sum_data[i,3] <- temp$parameter
+  sum_data[i,4] <- temp$p.value
+  sum_data[i,5] <- temp$conf.int[1]
+  sum_data[i,6] <- temp$conf.int[2]
+  sum_data[i,7] <- temp$estimate[1]
+  sum_data[i,8] <- temp$estimate[2]
+  temp <- effect_size_d_paired(PANASdata$T1_PA[PANASdata$globalPA == i],PANASdata$T2_PA[PANASdata$globalPA == i])
+  sum_data[i,9] <- temp$m_diff
+  sum_data[i,10] <- temp$ci_l_m_diff
+  sum_data[i,11] <- temp$ci_u_m_diff
+  sum_data[i,12] <- temp$d_av
+  sum_data[i,13] <- temp$d_av_unb
+  sum_data[i,14] <- temp$s_av
+  sum_data[i,15] <- temp$s_diff
+  sum_data[i,16] <- temp$ci_l_d_av
+  sum_data[i,17] <- temp$ci_u_d_av
+  sum_data[i,18] <- temp$d_z
+  sum_data[i,19] <- temp$d_z_unb
+  sum_data[i,20] <- temp$ci_l_d_z
+  sum_data[i,21] <- temp$ci_u_d_z
+  sum_data[i,22] <- temp$N
+  sum_data[i,23] <- temp$m1
+  sum_data[i,24] <- temp$m2
+  sum_data[i,25] <- temp$sd1
+  sum_data[i,26] <- temp$sd2
+  sum_data[i,27] <- temp$cor
+  sum_data[i,28] <- 1/sum_data$N[i] + sum_data$d_z[i]^2 / (2*sum_data$N[i]) #this is the formula for the variance based on the metafor package. It leads to CI slightly different from dz_l and dz_u because these are based on non-central t (using MBESS package).
+}
+# Now we store this data in a separate dataframe before we re-use the code for responses on the negative global anchor
+sum_data_PA <- sum_data
+# This table contains all numbers in Table 1, POSITIVE (except little change combined score)
+# View(sum_data_PA)
+
+# Still 775 participants across the 5 groups
+sum(sum_data_PA$N)
+
+#Calculate all statistics for negative----
+
+sum_data<-data.frame(global_answer = numeric(0),
+                     t = numeric(0),
+                     df = numeric(0), 
+                     p = numeric(0), 
+                     ci_lower_mean = numeric(0), 
+                     ci_upper_mean = numeric(0), 
+                     mean_1 = numeric(0), 
+                     mean_2 = numeric(0),
+                     m_diff = numeric(0),
+                     ci_l_m_diff = numeric(0),
+                     ci_u_m_diff = numeric(0),
+                     d_av = numeric(0),
+                     d_av_unb = numeric(0),
+                     s_av = numeric(0),
+                     s_diff = numeric(0),
+                     ci_l_d_av = numeric(0),
+                     ci_u_d_av = numeric(0),
+                     d_z = numeric(0),
+                     d_z_unb = numeric(0),
+                     ci_l_d_z = numeric(0),
+                     ci_u_d_z = numeric(0),
+                     N = numeric(0),
+                     m1 = numeric(0),
+                     m2 = numeric(0),
+                     sd1 = numeric(0),
+                     sd2 = numeric(0),
+                     cor = numeric(0),
+                     vi = numeric(0))
+for(i in 1:5){
+  temp <- t.test(PANASdata$NA_change[PANASdata$globalNA == i])
+  sum_data[i,1] <- i
+  sum_data[i,2] <- temp$statistic
+  sum_data[i,3] <- temp$parameter
+  sum_data[i,4] <- temp$p.value
+  sum_data[i,5] <- temp$conf.int[1]
+  sum_data[i,6] <- temp$conf.int[2]
+  sum_data[i,7] <- temp$estimate[1]
+  sum_data[i,8] <- temp$estimate[2]
+  temp <- effect_size_d_paired(PANASdata$T1_NA[PANASdata$globalNA == i],PANASdata$T2_NA[PANASdata$globalNA == i])
+  sum_data[i,9] <- temp$m_diff
+  sum_data[i,10] <- temp$ci_l_m_diff
+  sum_data[i,11] <- temp$ci_u_m_diff
+  sum_data[i,12] <- temp$d_av
+  sum_data[i,13] <- temp$d_av_unb
+  sum_data[i,14] <- temp$s_av
+  sum_data[i,15] <- temp$s_diff
+  sum_data[i,16] <- temp$ci_l_d_av
+  sum_data[i,17] <- temp$ci_u_d_av
+  sum_data[i,18] <- temp$d_z
+  sum_data[i,19] <- temp$d_z_unb
+  sum_data[i,20] <- temp$ci_l_d_z
+  sum_data[i,21] <- temp$ci_u_d_z
+  sum_data[i,22] <- temp$N
+  sum_data[i,23] <- temp$m1
+  sum_data[i,24] <- temp$m2
+  sum_data[i,25] <- temp$sd1
+  sum_data[i,26] <- temp$sd2
+  sum_data[i,27] <- temp$cor
+  sum_data[i,28] <- 1/sum_data$N[i] + sum_data$d_z[i]^2 / (2*sum_data$N[i]) #this is the formula for the variance based on the metafor package. It leads to CI slightly different from dz_l and dz_u because these are based on non-central t (using MBESS package).
+}
+# And we store these calculations in a separate dataframe.
+sum_data_NA <- sum_data
+# This table contains all numbers in Table 1, NEGATIVE (except little change combined score)
+# View(sum_data_NA)
+
+# Still 775 participants across the 5 groups
+sum(sum_data_NA$N)
+
+# Combine sum_data_PA and sum_data_NA (useful for plots) as sum_data
+sum_data <- rbind(sum_data_PA, sum_data_NA)
+sum_data$PA_NA <- c("pos", "pos", "pos", "pos", "pos",
+                    "neg", "neg", "neg", "neg", "neg")
+```
+## Descriptives
+
+Let's first look at the means, sd's, and correlations between positive and negative affect measured at time 1 and 2.
+
+We see the mean scores for the PA and NA differ. NA shows floor effects, the distributions are skewed. PA effects are a bit more varied and do not suffer from floor or ceiling effects.
+
+```{r}
+#plot raw data
+ggplot(PANASdata, aes(x = T1_PA, y = as.factor(globalPA))) + 
+  geom_density_ridges(jittered_points = TRUE, position = "raincloud", alpha = 0.7) +
+  theme_ridges(center = TRUE) +
+  labs(
+    x = "Positive Affect T1",
+    y = "Answer on Global Change question",
+    title = "Positive Affect per Anchor")
+
+ggplot(PANASdata, aes(x = T2_PA, y = as.factor(globalPA))) + 
+  geom_density_ridges(jittered_points = TRUE, position = "raincloud", alpha = 0.7) +
+  theme_ridges(center = TRUE) +
+  labs(
+    x = "Positive Affect T2",
+    y = "Answer on Global Change question",
+    title = "Positive Affect per Anchor")
+
+ggplot(PANASdata, aes(x = T1_NA, y = as.factor(globalNA))) + 
+  geom_density_ridges(jittered_points = TRUE, position = "raincloud", alpha = 0.7) +
+  theme_ridges(center = TRUE) +
+  labs(
+    x = "Negative Affect T1",
+    y = "Answer on Global Change question",
+    title = "Negative Affect per Anchor")
+
+ggplot(PANASdata, aes(x = T2_NA, y = as.factor(globalNA))) + 
+  geom_density_ridges(jittered_points = TRUE, position = "raincloud", alpha = 0.7) +
+  theme_ridges(center = TRUE) +
+  labs(
+    x = "Negative Affect T2",
+    y = "Answer on Global Change question",
+    title = "Negative Affect per Anchor")
+```
+
+We will analyze the differences scores. 
+It is important to remember that difference scores are calculated based on T2 - T1. So for PA, a score of 4 at T1 and 5 at T2 leads to a change score of 5-4 = 1. Thus, a positive score means PA changes in a positive direction - an increase of 1. For NA, a positive score means an increase in negative affect.
+
+We can plot the distributions, as a function of each answer on the global transition question (from 1 to five, much less positive/negative, a little less positive/negative, the same, a little more positive/negative, and much more positive/negative). 
+
+```{r}
+#plot raw difference scores
+p1 <- ggplot(PANASdata, aes(x = PA_change, y = as.factor(globalPA))) + 
+  geom_density_ridges(jittered_points = TRUE, position = "raincloud", alpha = 0.7) +
+  theme_ridges(center = TRUE) +
+  labs(
+    x = "Difference in Positive Affect",
+    y = "Answer on global change question",
+    title = "Change in Positive Effect per Anchor") +
+  scale_x_continuous(breaks = c(-3, -2, -1, 0, 1, 2, 3),
+                     limits = c(-3, 3))
+
+p2 <- ggplot(PANASdata, aes(x = NA_change, y = as.factor(globalNA))) + 
+  geom_density_ridges(jittered_points = TRUE, position = "raincloud", alpha = 0.7) +
+  theme_ridges(center = TRUE) +
+  labs(
+    x = "Difference in Negative Affect",
+    y = "Answer on global change question",
+    title = "Change in Negative Effect per Anchor") +
+   scale_x_continuous(breaks = c(-3, -2, -1, 0, 1, 2, 3),
+                     limits = c(-3, 3))
+
+grid.arrange(p1, p2, nrow = 2)
+```
+
+We see that there are not a lot of people who say they feel much less positive, or much more positive. Overall, the pattern is in the direction we expect - the change scores are positive if people indicate on the global question that they feel a little or much more negative or positive. Below is a plot of just the mean differences. This plot more clearly shows that the mean is not exactly 0 for the no change (3) group. Interestingly, both the positive as the negative change is slightly negative. 
+
+```{r, echo=FALSE}
+ggplot(data=sum_data, aes(x = global_answer, y = m_diff)) + 
+  stat_summary(aes(y = m_diff), fun = "mean", geom = "point") +
+  facet_grid(PA_NA ~ .) + 
+  ggtitle("Mean difference for 5 global answers per PA and NA")
+```
+
+
+
+```{r fig.cap = "Correlations between T1 and T2 for Positive affect and Negative affect"}
+
+# Look at correlations `between pre and post measure, for each global anchor answer
+# Correlation is highest for no change groups. This is important because the correlation
+ggplot(data = sum_data, aes(x = global_answer, y = cor)) + 
+  stat_summary(aes(y = cor), fun = "mean", geom = "point") +
+  facet_grid(PA_NA ~ .)
+
+
+```
+
+We see correlations are largest for the no change group (global answer 3). It's lowest for the groups that indicate most change (1 and 5). This makes sense. No change should give relative similar scores but the no change group varies more. If this is correct, we should see a larger standard deviation of the difference score, which as we see below is correct. 
+
+```{r, fig.cap = "Standard deviation for difference scores between T1 and T2 for Positive affect and Negative affect"}
+ggplot(data=sum_data, aes(x = global_answer, y = s_diff)) + 
+  stat_summary(aes(y = s_diff), fun = "mean", geom = "point") +
+  facet_grid(PA_NA ~ .)
+```
+
+A larger standard deviation of difference scores and a larger correlation means that Cohen's dz will be smaller. This is important to keep in mind. If the standard deviations and correlations are not similar across croups, the standardized effect sizes become more difficult to compare. 
+
+# Plots per Cohort
+
+We can examine our data by plotting it seperately for the 4 cohorts. 2018 and 2019 are 2 samples from the TU/e from different years. 2 and 5 are the prolific sample with 2 vs 5 days apart. The patterns are relatively similar, but the Prolific sample has a more general shoft across the days. 
+
+```{r}
+ggplot(PANASdata, aes(x = PA_change, y = as.factor(globalPA))) + 
+  geom_density_ridges(jittered_points = TRUE, position = "raincloud", alpha = 0.7) +
+  theme_ridges(center = TRUE) +
+  labs(
+    x = "Difference in Positive Affect",
+    y = "Answer on Global Change question",
+    title = "Change in Positive Effect per Anchor") +
+  facet_grid(Cohort ~ .)
+
+ggplot(PANASdata, aes(x = NA_change, y = as.factor(globalNA))) + 
+  geom_density_ridges(jittered_points = TRUE, position = "raincloud", alpha = 0.7) +
+  theme_ridges(center = TRUE) +
+  labs(
+    x = "Difference in Negative Affect",
+    y = "Answer on Global Change question",
+    title = "Change in Negative Effect per Anchor") +
+  facet_grid(Cohort ~ .)
+
+```
+
+We can also examine the correlations for each subgroup by repeating the summary stats calculations above for each global answer, but then when selecting data from a single subgroup. 
+
+For the 2 day prolific group:
+
+```{r, echo=FALSE, include=FALSE}
+#Calculate all statistics for negative----
+
+PANASdata_cohort <- PANASdata[which(PANASdata$Cohort == '2'),]
+
+for(i in 1:5){
+  temp <- t.test(PANASdata_cohort$NA_change[PANASdata_cohort$globalNA == i])
+  sum_data[i,1] <- i
+  sum_data[i,2] <- temp$statistic
+  sum_data[i,3] <- temp$parameter
+  sum_data[i,4] <- temp$p.value
+  sum_data[i,5] <- temp$conf.int[1]
+  sum_data[i,6] <- temp$conf.int[2]
+  sum_data[i,7] <- temp$estimate[1]
+  sum_data[i,8] <- temp$estimate[2]
+  temp <- effect_size_d_paired(PANASdata_cohort$T1_NA[PANASdata_cohort$globalNA == i],PANASdata_cohort$T2_NA[PANASdata_cohort$globalNA == i])
+  sum_data[i,9] <- temp$m_diff
+  sum_data[i,10] <- temp$ci_l_m_diff
+  sum_data[i,11] <- temp$ci_u_m_diff
+  sum_data[i,12] <- temp$d_av
+  sum_data[i,13] <- temp$d_av_unb
+  sum_data[i,14] <- temp$s_av
+  sum_data[i,15] <- temp$s_diff
+  sum_data[i,16] <- temp$ci_l_d_av
+  sum_data[i,17] <- temp$ci_u_d_av
+  sum_data[i,18] <- temp$d_z
+  sum_data[i,19] <- temp$d_z_unb
+  sum_data[i,20] <- temp$ci_l_d_z
+  sum_data[i,21] <- temp$ci_u_d_z
+  sum_data[i,22] <- temp$N
+  sum_data[i,23] <- temp$m1
+  sum_data[i,24] <- temp$m2
+  sum_data[i,25] <- temp$sd1
+  sum_data[i,26] <- temp$sd2
+  sum_data[i,27] <- temp$cor
+  sum_data[i,28] <- 1/sum_data$N[i] + sum_data$d_z[i]^2 / (2*sum_data$N[i]) #this is the formula for the variance based on the metafor package. It leads to CI slightly different from dz_l and dz_u because these are based on non-central t (using MBESS package).
+}
+# And we store these calculations in a separate dataframe.
+sum_data_NA_cohort <- sum_data
+
+for(i in 1:5){
+  temp <- t.test(PANASdata_cohort$PA_change[PANASdata_cohort$globalPA == i])
+  sum_data[i,1] <- i
+  sum_data[i,2] <- temp$statistic
+  sum_data[i,3] <- temp$parameter
+  sum_data[i,4] <- temp$p.value
+  sum_data[i,5] <- temp$conf.int[1]
+  sum_data[i,6] <- temp$conf.int[2]
+  sum_data[i,7] <- temp$estimate[1]
+  sum_data[i,8] <- temp$estimate[2]
+  temp <- effect_size_d_paired(PANASdata_cohort$T1_PA[PANASdata_cohort$globalPA == i],PANASdata_cohort$T2_PA[PANASdata_cohort$globalPA == i])
+  sum_data[i,9] <- temp$m_diff
+  sum_data[i,10] <- temp$ci_l_m_diff
+  sum_data[i,11] <- temp$ci_u_m_diff
+  sum_data[i,12] <- temp$d_av
+  sum_data[i,13] <- temp$d_av_unb
+  sum_data[i,14] <- temp$s_av
+  sum_data[i,15] <- temp$s_diff
+  sum_data[i,16] <- temp$ci_l_d_av
+  sum_data[i,17] <- temp$ci_u_d_av
+  sum_data[i,18] <- temp$d_z
+  sum_data[i,19] <- temp$d_z_unb
+  sum_data[i,20] <- temp$ci_l_d_z
+  sum_data[i,21] <- temp$ci_u_d_z
+  sum_data[i,22] <- temp$N
+  sum_data[i,23] <- temp$m1
+  sum_data[i,24] <- temp$m2
+  sum_data[i,25] <- temp$sd1
+  sum_data[i,26] <- temp$sd2
+  sum_data[i,27] <- temp$cor
+  sum_data[i,28] <- 1/sum_data$N[i] + sum_data$d_z[i]^2 / (2*sum_data$N[i]) #this is the formula for the variance based on the metafor package. It leads to CI slightly different from dz_l and dz_u because these are based on non-central t (using MBESS package).
+}
+# And we store these calculations in a separate dataframe.
+sum_data_PA_cohort <- sum_data
+
+sum_data_cohort <- rbind(sum_data_PA_cohort, sum_data_NA_cohort)
+sum_data_cohort$PA_NA <- c("pos", "pos", "pos", "pos", "pos",
+                    "neg", "neg", "neg", "neg", "neg")
+```
+
+```{r}
+ggplot(data=sum_data_cohort, aes(x = global_answer, y = s_diff)) + 
+  stat_summary(aes(y = s_diff), fun = "mean", geom = "point") +
+  facet_grid(PA_NA ~ .)
+
+ggplot(data=sum_data_cohort, aes(x = global_answer, y = cor)) + 
+  stat_summary(aes(y = cor), fun = "mean", geom = "point") +
+  facet_grid(PA_NA ~ .)
+
+ggplot(data=sum_data_cohort, aes(x = global_answer, y = m_diff)) + 
+  stat_summary(aes(y = m_diff), fun = "mean", geom = "point") +
+  facet_grid(PA_NA ~ .) + 
+  ggtitle("Mean difference for 5 global answers per PA and NA")
+
+```
+
+For the 5 day prolific group:
+
+```{r, echo=FALSE, include=FALSE}
+#Calculate all statistics for negative----
+
+PANASdata_cohort <- PANASdata[which(PANASdata$Cohort == '5'),]
+
+for(i in 1:5){
+  temp <- t.test(PANASdata_cohort$NA_change[PANASdata_cohort$globalNA == i])
+  sum_data[i,1] <- i
+  sum_data[i,2] <- temp$statistic
+  sum_data[i,3] <- temp$parameter
+  sum_data[i,4] <- temp$p.value
+  sum_data[i,5] <- temp$conf.int[1]
+  sum_data[i,6] <- temp$conf.int[2]
+  sum_data[i,7] <- temp$estimate[1]
+  sum_data[i,8] <- temp$estimate[2]
+  temp <- effect_size_d_paired(PANASdata_cohort$T1_NA[PANASdata_cohort$globalNA == i],PANASdata_cohort$T2_NA[PANASdata_cohort$globalNA == i])
+  sum_data[i,9] <- temp$m_diff
+  sum_data[i,10] <- temp$ci_l_m_diff
+  sum_data[i,11] <- temp$ci_u_m_diff
+  sum_data[i,12] <- temp$d_av
+  sum_data[i,13] <- temp$d_av_unb
+  sum_data[i,14] <- temp$s_av
+  sum_data[i,15] <- temp$s_diff
+  sum_data[i,16] <- temp$ci_l_d_av
+  sum_data[i,17] <- temp$ci_u_d_av
+  sum_data[i,18] <- temp$d_z
+  sum_data[i,19] <- temp$d_z_unb
+  sum_data[i,20] <- temp$ci_l_d_z
+  sum_data[i,21] <- temp$ci_u_d_z
+  sum_data[i,22] <- temp$N
+  sum_data[i,23] <- temp$m1
+  sum_data[i,24] <- temp$m2
+  sum_data[i,25] <- temp$sd1
+  sum_data[i,26] <- temp$sd2
+  sum_data[i,27] <- temp$cor
+  sum_data[i,28] <- 1/sum_data$N[i] + sum_data$d_z[i]^2 / (2*sum_data$N[i]) #this is the formula for the variance based on the metafor package. It leads to CI slightly different from dz_l and dz_u because these are based on non-central t (using MBESS package).
+}
+# And we store these calculations in a separate dataframe.
+sum_data_NA_cohort <- sum_data
+
+for(i in 1:5){
+  temp <- t.test(PANASdata_cohort$PA_change[PANASdata_cohort$globalPA == i])
+  sum_data[i,1] <- i
+  sum_data[i,2] <- temp$statistic
+  sum_data[i,3] <- temp$parameter
+  sum_data[i,4] <- temp$p.value
+  sum_data[i,5] <- temp$conf.int[1]
+  sum_data[i,6] <- temp$conf.int[2]
+  sum_data[i,7] <- temp$estimate[1]
+  sum_data[i,8] <- temp$estimate[2]
+  temp <- effect_size_d_paired(PANASdata_cohort$T1_PA[PANASdata_cohort$globalPA == i],PANASdata_cohort$T2_PA[PANASdata_cohort$globalPA == i])
+  sum_data[i,9] <- temp$m_diff
+  sum_data[i,10] <- temp$ci_l_m_diff
+  sum_data[i,11] <- temp$ci_u_m_diff
+  sum_data[i,12] <- temp$d_av
+  sum_data[i,13] <- temp$d_av_unb
+  sum_data[i,14] <- temp$s_av
+  sum_data[i,15] <- temp$s_diff
+  sum_data[i,16] <- temp$ci_l_d_av
+  sum_data[i,17] <- temp$ci_u_d_av
+  sum_data[i,18] <- temp$d_z
+  sum_data[i,19] <- temp$d_z_unb
+  sum_data[i,20] <- temp$ci_l_d_z
+  sum_data[i,21] <- temp$ci_u_d_z
+  sum_data[i,22] <- temp$N
+  sum_data[i,23] <- temp$m1
+  sum_data[i,24] <- temp$m2
+  sum_data[i,25] <- temp$sd1
+  sum_data[i,26] <- temp$sd2
+  sum_data[i,27] <- temp$cor
+  sum_data[i,28] <- 1/sum_data$N[i] + sum_data$d_z[i]^2 / (2*sum_data$N[i]) #this is the formula for the variance based on the metafor package. It leads to CI slightly different from dz_l and dz_u because these are based on non-central t (using MBESS package).
+}
+# And we store these calculations in a separate dataframe.
+sum_data_PA_cohort <- sum_data
+
+sum_data_cohort <- rbind(sum_data_PA_cohort, sum_data_NA_cohort)
+sum_data_cohort$PA_NA <- c("pos", "pos", "pos", "pos", "pos",
+                    "neg", "neg", "neg", "neg", "neg")
+```
+
+```{r, echo = FALSE}
+ggplot(data=sum_data_cohort, aes(x = global_answer, y = s_diff)) + 
+  stat_summary(aes(y = s_diff), fun = "mean", geom = "point") +
+  facet_grid(PA_NA ~ .)
+
+ggplot(data=sum_data_cohort, aes(x = global_answer, y = cor)) + 
+  stat_summary(aes(y = cor), fun = "mean", geom = "point") +
+  facet_grid(PA_NA ~ .)
+
+ggplot(data=sum_data_cohort, aes(x = global_answer, y = m_diff)) + 
+  stat_summary(aes(y = m_diff), fun = "mean", geom = "point") +
+  facet_grid(PA_NA ~ .) + 
+  ggtitle("Mean difference for 5 global answers per PA and NA")
+
+```
+
+We see the correlations for the 5 day groups for the little change group is a bit higher than for the 2 day group. This makes sense given the greater time difference, but introduces some variation in the data.
+

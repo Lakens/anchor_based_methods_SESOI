@@ -201,7 +201,7 @@ effect_size_d_paired <- function (x, y, conf.level = 0.95){
   d_z <- t_value/sqrt(N)
   d_z
   d_z_unb <- (1-(3/(4*(N-1)-1)))*d_z
-  ci_l_d_z <- nct_limits$Lower.Limit/sqrt(N)
+  ci_l_d_z <- nct_limits$Lower.Limit/sqrt(N) #earlier version had /sqrt(df) - corrected by Dr. Erin Buchanan and Prof. Thom Baguley
   ci_u_d_z <- nct_limits$Upper.Limit/sqrt(N)
   ci_l_d_z
   ci_u_d_z
@@ -227,5 +227,6 @@ effect_size_d_paired <- function (x, y, conf.level = 0.95){
   cat("\n")
   cat("N = ", paste0(N)," pairs.",
       sep = "")
+  cat("\n")
   invisible(list(m_diff = m_diff, ci_l_m_diff = test_res$conf.int[1], ci_u_m_diff = test_res$conf.int[2], d_av = d_av, d_av_unb = d_av_unb, s_av = s_av, s_diff = s_diff, ci_l_d_av = ci_l_d_av, ci_u_d_av = ci_u_d_av, d_z = d_z, d_z_unb = d_z_unb, ci_l_d_z = ci_l_d_z, ci_u_d_z = ci_u_d_z, N = N, m1 = mean(x), m2 = mean(y), sd1 = sd(x), sd2 = sd(y), cor = cor(x,y) ))
 }

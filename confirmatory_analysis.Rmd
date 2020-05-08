@@ -1,0 +1,516 @@
+---
+title: "Confirmatory Analyses SESOI PANAS"
+output:
+  html_document:
+    df_print: paged
+editor_options: 
+  chunk_output_type: console
+---
+
+```{r, include=FALSE}
+options(scipen = 999)
+##Load libraries and data
+
+library('plyr')
+library("effsize")
+library('ggplot2')
+library('dplyr')
+library('metafor')
+library('reshape2') 
+library('gridExtra')
+library('ggridges')
+library('cocor')
+
+PANASdata <- read.csv(file('PANAS_total_analysis_data.csv'), stringsAsFactors = FALSE)
+# View(PANASdata)
+# assuming all data have been read in with only complete cases (N = 775) remaining----
+# THE PRE-REGISTERED SCRIPT---- (added only some extra annotations to code)
+
+#Added a dedicated function to perform all these calculations - DL ----
+source("effect_size_d_paired_function.R")
+
+#using subsetting to calculate mean of T1 and T2 PA and NA for each participant
+PANASdata$T1_PA <- rowMeans(PANASdata[ , grep('T1_PA', colnames(PANASdata))], na.rm=TRUE)
+PANASdata$T1_NA <- rowMeans(PANASdata[ , grep('T1_NA', colnames(PANASdata))], na.rm=TRUE)
+PANASdata$T2_PA <- rowMeans(PANASdata[ , grep('T2_PA', colnames(PANASdata))], na.rm=TRUE)
+PANASdata$T2_NA <- rowMeans(PANASdata[ , grep('T2_NA', colnames(PANASdata))], na.rm=TRUE)
+
+#calculate difference score, from T1 to T2, for PA and NA for each participant
+PANASdata$PA_change <- PANASdata$T2_PA - PANASdata$T1_PA
+PANASdata$NA_change <- PANASdata$T2_NA - PANASdata$T1_NA
+
+# Calculate all statistics for positive----
+# We first create an empty dataframe that stores all information we can compute
+
+sum_data<-data.frame(global_answer = numeric(0),
+                     t = numeric(0), 
+                     df = numeric(0), 
+                     p = numeric(0), 
+                     ci_lower_mean = numeric(0), 
+                     ci_upper_mean = numeric(0), 
+                     mean_1 = numeric(0), 
+                     mean_2 = numeric(0),
+                     m_diff = numeric(0),
+                     ci_l_m_diff = numeric(0),
+                     ci_u_m_diff = numeric(0),
+                     d_av = numeric(0),
+                     d_av_unb = numeric(0),
+                     s_av = numeric(0),
+                     s_diff = numeric(0),
+                     ci_l_d_av = numeric(0),
+                     ci_u_d_av = numeric(0),
+                     d_z = numeric(0),
+                     d_z_unb = numeric(0),
+                     ci_l_d_z = numeric(0),
+                     ci_u_d_z = numeric(0),
+                     N = numeric(0),
+                     m1 = numeric(0),
+                     m2 = numeric(0),
+                     sd1 = numeric(0),
+                     sd2 = numeric(0),
+                     cor = numeric(0),
+                     vi = numeric(0))
+# Then we perform calculations for each subgroup (who report 1-5 on the global anchor, for positive affect)
+# We perform a t-test and store the results as temp, then add these to sum_data
+# Then we use a custom function to calculate effect sizes and CI for paired t-tests, and save as temp, and add those to sum_data
+
+for(i in 1:5){
+  temp <- t.test(PANASdata$PA_change[PANASdata$globalPA == i])
+  sum_data[i,1] <- i
+  sum_data[i,2] <- temp$statistic
+  sum_data[i,3] <- temp$parameter
+  sum_data[i,4] <- temp$p.value
+  sum_data[i,5] <- temp$conf.int[1]
+  sum_data[i,6] <- temp$conf.int[2]
+  sum_data[i,7] <- temp$estimate[1]
+  sum_data[i,8] <- temp$estimate[2]
+  temp <- effect_size_d_paired(PANASdata$T1_PA[PANASdata$globalPA == i],PANASdata$T2_PA[PANASdata$globalPA == i])
+  sum_data[i,9] <- temp$m_diff
+  sum_data[i,10] <- temp$ci_l_m_diff
+  sum_data[i,11] <- temp$ci_u_m_diff
+  sum_data[i,12] <- temp$d_av
+  sum_data[i,13] <- temp$d_av_unb
+  sum_data[i,14] <- temp$s_av
+  sum_data[i,15] <- temp$s_diff
+  sum_data[i,16] <- temp$ci_l_d_av
+  sum_data[i,17] <- temp$ci_u_d_av
+  sum_data[i,18] <- temp$d_z
+  sum_data[i,19] <- temp$d_z_unb
+  sum_data[i,20] <- temp$ci_l_d_z
+  sum_data[i,21] <- temp$ci_u_d_z
+  sum_data[i,22] <- temp$N
+  sum_data[i,23] <- temp$m1
+  sum_data[i,24] <- temp$m2
+  sum_data[i,25] <- temp$sd1
+  sum_data[i,26] <- temp$sd2
+  sum_data[i,27] <- temp$cor
+  sum_data[i,28] <- 1/sum_data$N[i] + sum_data$d_z[i]^2 / (2*sum_data$N[i]) #this is the formula for the variance based on the metafor package. It leads to CI slightly different from dz_l and dz_u because these are based on non-central t (using MBESS package).
+}
+
+# Now we store this data in a separate dataframe before we re-use the code for responses on the negative global anchor
+sum_data_PA <- sum_data
+
+# This table contains all numbers in Table 1, POSITIVE (except little change combined score)
+# View(sum_data_PA)
+
+# Still 775 participants across the 5 groups
+sum(sum_data_PA$N)
+
+#Calculate all statistics for negative----
+
+sum_data<-data.frame(global_answer = numeric(0),
+                     t = numeric(0),
+                     df = numeric(0), 
+                     p = numeric(0), 
+                     ci_lower_mean = numeric(0), 
+                     ci_upper_mean = numeric(0), 
+                     mean_1 = numeric(0), 
+                     mean_2 = numeric(0),
+                     m_diff = numeric(0),
+                     ci_l_m_diff = numeric(0),
+                     ci_u_m_diff = numeric(0),
+                     d_av = numeric(0),
+                     d_av_unb = numeric(0),
+                     s_av = numeric(0),
+                     s_diff = numeric(0),
+                     ci_l_d_av = numeric(0),
+                     ci_u_d_av = numeric(0),
+                     d_z = numeric(0),
+                     d_z_unb = numeric(0),
+                     ci_l_d_z = numeric(0),
+                     ci_u_d_z = numeric(0),
+                     N = numeric(0),
+                     m1 = numeric(0),
+                     m2 = numeric(0),
+                     sd1 = numeric(0),
+                     sd2 = numeric(0),
+                     cor = numeric(0),
+                     vi = numeric(0))
+for(i in 1:5){
+  temp <- t.test(PANASdata$NA_change[PANASdata$globalNA == i])
+  sum_data[i,1] <- i
+  sum_data[i,2] <- temp$statistic
+  sum_data[i,3] <- temp$parameter
+  sum_data[i,4] <- temp$p.value
+  sum_data[i,5] <- temp$conf.int[1]
+  sum_data[i,6] <- temp$conf.int[2]
+  sum_data[i,7] <- temp$estimate[1]
+  sum_data[i,8] <- temp$estimate[2]
+  temp <- effect_size_d_paired(PANASdata$T1_NA[PANASdata$globalNA == i],PANASdata$T2_NA[PANASdata$globalNA == i])
+  sum_data[i,9] <- temp$m_diff
+  sum_data[i,10] <- temp$ci_l_m_diff
+  sum_data[i,11] <- temp$ci_u_m_diff
+  sum_data[i,12] <- temp$d_av
+  sum_data[i,13] <- temp$d_av_unb
+  sum_data[i,14] <- temp$s_av
+  sum_data[i,15] <- temp$s_diff
+  sum_data[i,16] <- temp$ci_l_d_av
+  sum_data[i,17] <- temp$ci_u_d_av
+  sum_data[i,18] <- temp$d_z
+  sum_data[i,19] <- temp$d_z_unb
+  sum_data[i,20] <- temp$ci_l_d_z
+  sum_data[i,21] <- temp$ci_u_d_z
+  sum_data[i,22] <- temp$N
+  sum_data[i,23] <- temp$m1
+  sum_data[i,24] <- temp$m2
+  sum_data[i,25] <- temp$sd1
+  sum_data[i,26] <- temp$sd2
+  sum_data[i,27] <- temp$cor
+  sum_data[i,28] <- 1/sum_data$N[i] + sum_data$d_z[i]^2 / (2*sum_data$N[i]) #this is the formula for the variance based on the metafor package. It leads to CI slightly different from dz_l and dz_u because these are based on non-central t (using MBESS package).
+}
+# And we store these calculations in a separate dataframe.
+sum_data_NA <- sum_data
+
+# This table contains all numbers in Table 1, NEGATIVE (except little change combined score)
+# View(sum_data_NA)
+
+# Still 775 participants across the 5 groups
+sum(sum_data_NA$N)
+
+# Combine sum_data_PA and sum_data_NA (useful for plots) as sum_data
+sum_data <- rbind(sum_data_PA, sum_data_NA)
+sum_data$PA_NA <- c("pos", "pos", "pos", "pos", "pos",
+                    "neg", "neg", "neg", "neg", "neg")
+```
+
+# All Results for Positive Affect
+
+```{r}
+sum_data_PA
+```
+
+# All Results for Negative Affect
+
+```{r}
+sum_data_NA
+```
+
+Reproducing only the columns in Table 1: 
+
+```{r}
+#Create summary stats table
+sum_data <- rbind(sum_data_PA, sum_data_NA) # bind positive and negative affect results
+round(sum_data[,c(1,22,9,10,11,18,20,21,12,16,17)],2)
+```
+
+Table 1 also includes a row "LITTLE CHANGE" which combines the two little change groups, or people who answered either 2 or 4 on the global rating of change, the anchor question.
+
+First, we compute the combined scores on the raw scale. We combine scores that go in the opposite direction. We compute the difference as T2 - T1. This means that if my PA at T1 is 4, and at T2 is 5, the difference is 1. So, a positive score indicates an increase on the scale. We should expect that on average peope who report to feel a little more positive at T2 than T1 show positive difference scores, and people who report they feel a little less positive at T2 than T1 show negative difference scores. To combine the positive and negative scores into a single change score, we reverse the scores for people who report to feel 'a little less' (global anchor answer 2). 
+
+These results also reproduce the statement in the article that: "For participants in the “little change” groups, the absolute mean change (and estimate for the minimum subjectively experienced difference) in positive affect was 0.26 (SD = 0.61) scale points and for negative affect it was 0.28 (SD = 0.57)."
+
+```{r}
+# Create new columns forthe recoded change scores:
+PANASdata$PA_change_rec <- PANASdata$T2_PA - PANASdata$T1_PA
+PANASdata$NA_change_rec <- PANASdata$T2_NA - PANASdata$T1_NA
+
+# Need to flip around the scores from group 2 (which are in the opposite direction)
+# i.e., reverse score those who said they felt "a little less" positive or negative
+PANASdata$PA_change_rec <- ifelse(PANASdata$globalPA == 2 | PANASdata$globalPA == 1,
+                                  PANASdata$PA_change_rec * -1,
+                                  PANASdata$PA_change_rec * 1)
+
+PANASdata$NA_change_rec <- ifelse(PANASdata$globalNA == 2 | PANASdata$globalNA == 1,
+                                  PANASdata$NA_change_rec * -1,
+                                  PANASdata$NA_change_rec * 1)
+
+# Mean only for little change group based on recoded scores: positive affect
+mean(PANASdata$PA_change_rec[PANASdata$globalPA == 2 | PANASdata$globalPA == 4]) # mean
+sd(PANASdata$PA_change_rec[PANASdata$globalPA == 2 | PANASdata$globalPA == 4]) # standard deviation
+
+#t-tests to get CIs around the mean for the little changed groups
+t.test(PANASdata$PA_change_rec[PANASdata$globalPA == 2 | PANASdata$globalPA == 4])
+
+#Mean only for little change group  based on recoded scores: negative affect
+mean(PANASdata$NA_change_rec[PANASdata$globalNA == 2 | PANASdata$globalNA == 4]) # mean
+sd(PANASdata$NA_change_rec[PANASdata$globalNA == 2 | PANASdata$globalNA == 4]) # standard deviation
+
+#t-tests to get CIs around the mean for the little changed groups
+t.test(PANASdata$NA_change_rec[PANASdata$globalNA == 2 | PANASdata$globalNA == 4])
+```
+
+For the standardized effect sizes d_z and d_av we can perform a meta-analysis. We can use the escalc function in metafor - which reports a bias corrected version of dz. We are printing the forest plots (which also contain the results in Table 1) which clearly show the heterogeneity - this is because of the change in scores for people who feel 'the same'. Even though both little change groups differ quite symmetrically from the 'no change' group, because the 'no change' group has shifted down, 
+
+```{r}
+# for positive:
+g <- escalc(ni = sum_data_PA$N, m1i = sum_data_PA$m1, m2i = sum_data_PA$m2, sd1i = sum_data_PA$sd1, sd2i = sum_data_PA$sd2, ri = sum_data_PA$cor, measure = "SMCC")
+g
+# We reverse the direction of the effect for individuals in group 2 by using abs(yi)
+result <- rma(abs(yi), vi, data=g[c(2,4),], slab = c("a little worse","a little better"))
+result
+forest(result)
+
+#for negative:
+g <- escalc(ni = sum_data_NA$N, m1i = sum_data_NA$m1, m2i = sum_data_NA$m2, sd1i = sum_data_NA$sd1, sd2i = sum_data_NA$sd2, ri = sum_data_NA$cor, measure = "SMCC")
+# We reverse the direction of the effect for individuals in group 2 by using abs(yi)
+result <- rma(abs(yi), vi, data=g[c(2,4),], slab = c("a little worse","a little better"))
+result
+forest(result)
+
+#We can also meta-analyze d_av (treating the 2 scores as independent)----
+# For positive
+g <- escalc(n1i = sum_data_PA$N, n2i = sum_data_PA$N, m1i = sum_data_PA$m1, m2i = sum_data_PA$m2, sd1i = sum_data_PA$sd1, sd2i = sum_data_PA$sd2, measure = "SMD")
+# We reverse the direction of the effect for individuals in group 2 by using abs(yi)
+result <- rma(abs(yi), vi, data=g[c(2,4),], slab = c("a little worse","a little better"))
+result
+forest(result)
+
+# For negative
+g <- escalc(n1i = sum_data_NA$N, n2i = sum_data_NA$N, m1i = sum_data_NA$m1, m2i = sum_data_NA$m2, sd1i = sum_data_NA$sd1, sd2i = sum_data_NA$sd2, measure = "SMD")
+# We reverse the direction of the effect for individuals in group 2 by using abs(yi)
+result <- rma(abs(yi), vi, data=g[c(2,4),], slab = c("a little worse","a little better"))
+result
+forest(result)
+```
+
+# Difference from 'no change' group
+
+The following analyses reproduce the results for the statement: 
+
+"In our study, for positive affect, participants who indicated that they felt the same (M = -0.18, SD = 0.57) had change scores which were statistically different from those indicating that they had changed a little (M = 0.26, SD = 0.61), t(585.86) = 9.68, p < .001. Similarly, for negative affect, participants who felt the same (M = -0.11, SD = 0.45) had change scores that were significantly different from those who felt a little different (M = 0.28, SD = 0.57), t(664.4) = 9.98, p < .001. "
+
+```{r}
+
+# ### test of difference between the "little-changed" groups and the "same" group
+# ### This is the result reported in the paper.
+# # for PA
+# t.test(PANASdata$PA_change_rec[PANASdata$globalPA == 2 | PANASdata$globalPA == 4], 
+#        PANASdata$PA_change_rec[PANASdata$globalPA == 3])
+# mean(PANASdata$PA_change_rec[PANASdata$globalPA == 3])
+# sd(PANASdata$PA_change_rec[PANASdata$globalPA == 3])
+# mean(PANASdata$PA_change_rec[PANASdata$globalPA == 2 | PANASdata$globalPA == 4])
+# 
+# mean(PANASdata$PA_change_rec[PANASdata$globalPA == 2])
+# mean(PANASdata$PA_change_rec[PANASdata$globalPA == 4])
+# 
+# 
+# 
+# 
+# 
+# 
+# sd(PANASdata$PA_change_rec[PANASdata$globalPA == 2 | PANASdata$globalPA == 4])
+# 
+# #for NA
+# t.test(PANASdata$NA_change_rec[PANASdata$globalNA == 2 | PANASdata$globalNA == 4], 
+#        PANASdata$NA_change_rec[PANASdata$globalNA == 3])
+# mean(PANASdata$NA_change_rec[PANASdata$globalNA == 3])
+# sd(PANASdata$NA_change_rec[PANASdata$globalNA == 3])
+# mean(PANASdata$NA_change_rec[PANASdata$globalNA == 2 | PANASdata$globalNA == 4])
+# sd(PANASdata$NA_change_rec[PANASdata$globalNA == 2 | PANASdata$globalNA == 4])
+# sd(PANASdata$NA_change_rec[PANASdata$globalNA == 2])
+# sd(PANASdata$NA_change_rec[PANASdata$globalNA == 4])
+# 
+# 
+
+
+
+
+```
+
+The code below reproduces:
+
+In our study, people needed to change by 0.26 (CI95% [0.16, 0.35]) scale points to stop rating themselves as feeling the same and start rating themselves as feeling a little more positive and they needed to change by 0.40 (CI95% [0.28, 0.51]) scale points to stop rating themselves as feeling the same and start rating themselves as feeling a little less positive. Given the somewhat large overlap of these confidence intervals, we can take the average of these two estimates for the minimum subjectively experienced difference (0.33 ). For negative affect, people needed to change 0.21 (CI95% [0.12, 0.30]) scale points to stop rating themselves as feeling the same and start rating themselves as feeling a little less negative and they needed to change by 0.33 (CI95% [0.22, 0.43]) scale points to stop rating themselves as feeling the same and start rating themselves as feeling a little more negative. 
+
+```{r}
+######### OTHER EXPLORATORY ANALYSES
+#other (exploratory) analyses, and descriptive statistics----
+
+### to calculate Redelmeier changes, first separately for each group
+mean(PANASdata$PA_change[PANASdata$globalPA == 4]-PANASdata$PA_change[PANASdata$globalPA == 3])
+t.test(PANASdata$PA_change[PANASdata$globalPA == 4], 
+       PANASdata$PA_change[PANASdata$globalPA == 3]) # to get 95% CI around mean
+
+mean(PANASdata$PA_change[PANASdata$globalPA == 3]-PANASdata$PA_change[PANASdata$globalPA == 2])
+t.test(PANASdata$PA_change[PANASdata$globalPA == 3], 
+       PANASdata$PA_change[PANASdata$globalPA == 2]) # to get 95% CI around mean
+
+# Then we combine the groups 
+# We need to subtract the groups from the no change group. Then average them.
+no_change_mean_PA <- mean(PANASdata$PA_change_rec[PANASdata$globalPA == 3])
+little_change_PA <- c((PANASdata$PA_change_rec[PANASdata$globalPA == 2] + no_change_mean_PA),
+                   (PANASdata$PA_change_rec[PANASdata$globalPA == 4] - no_change_mean_PA))
+           
+# We can check the means (difference from no change group)
+# These values should match the differences you could calculate from Table 1
+mean((PANASdata$PA_change_rec[PANASdata$globalPA == 2] + no_change_mean_PA))
+mean((PANASdata$PA_change_rec[PANASdata$globalPA == 4] - no_change_mean_PA))
+
+# We report test against both groups in paper
+t.test((PANASdata$PA_change_rec[PANASdata$globalPA == 2] + no_change_mean_PA))
+t.test((PANASdata$PA_change_rec[PANASdata$globalPA == 4] - no_change_mean_PA))
+
+# Perform a t-test (against 0 - this is a difference score against no change group)
+t.test(little_change_PA)              
+mean(little_change_PA) # get the mean
+sd(little_change_PA) # Get the sd
+
+# Now for negative affect
+
+mean(PANASdata$NA_change[PANASdata$globalNA == 3]-PANASdata$NA_change[PANASdata$globalNA == 2])
+t.test(PANASdata$NA_change[PANASdata$globalNA == 3], 
+       PANASdata$NA_change[PANASdata$globalNA == 2]) # to get 95% CI around mean
+
+mean(PANASdata$NA_change[PANASdata$globalNA == 4]-PANASdata$NA_change[PANASdata$globalNA == 3])
+t.test(PANASdata$NA_change[PANASdata$globalNA == 4], 
+       PANASdata$NA_change[PANASdata$globalNA == 3]) # to get 95% CI around mean
+
+# We need to subtract the groups from the no change group. Then average them.
+
+no_change_mean_NA <- mean(PANASdata$NA_change_rec[PANASdata$globalNA == 3])
+little_change_NA <- c((PANASdata$NA_change_rec[PANASdata$globalNA == 2] + no_change_mean_NA),
+                   (PANASdata$NA_change_rec[PANASdata$globalNA == 4] - no_change_mean_NA))
+
+# These means are also the differences as you would compute them from table 1:
+mean((PANASdata$NA_change_rec[PANASdata$globalNA == 2] + no_change_mean_NA))
+mean((PANASdata$NA_change_rec[PANASdata$globalNA == 4] - no_change_mean_NA))
+
+# So we can compute the t-test against 0. 
+# This is now basically a test against the no change group. 
+t.test(little_change_NA)
+mean(little_change_NA)
+sd(little_change_NA)
+
+```
+
+# Plot
+
+We can first plot the change scores for positive and negative affect, for each of the 5 global change answers. This is Figure 1.
+
+```{r}
+#plot raw difference scores
+p1 <- ggplot(PANASdata, aes(x = PA_change, y = as.factor(globalPA))) + 
+  geom_density_ridges(jittered_points = TRUE, position = "raincloud", alpha = 0.7) +
+  theme_ridges(center = TRUE) +
+  labs(
+    x = "Difference in Positive Affect",
+    y = "Answer on global change question",
+    title = "Change in Positive Effect per Anchor") +
+  scale_x_continuous(breaks = c(-3, -2, -1, 0, 1, 2, 3),
+                     limits = c(-3, 3))
+
+p2 <- ggplot(PANASdata, aes(x = NA_change, y = as.factor(globalNA))) + 
+  geom_density_ridges(jittered_points = TRUE, position = "raincloud", alpha = 0.7) +
+  theme_ridges(center = TRUE) +
+  labs(
+    x = "Difference in Negative Affect",
+    y = "Answer on global change question") +
+   scale_x_continuous(breaks = c(-3, -2, -1, 0, 1, 2, 3),
+                     limits = c(-3, 3))
+
+#Save combined plot
+#jpeg(file="plot_dif.jpg",width=2000,height=2400, units = "px", res = 300)
+grid.arrange(p1, p2, nrow = 2)
+#dev.off()
+```
+
+Then we illustrate the variability in changes across conditions by linking each T1 and t2 score. 
+
+```{r}
+###plots
+
+#NOW WE MAKE IT LONG FORMAT and we only want those in the little changed PA group first
+longPA = PANASdata
+
+# Add a variable for each individual 
+longPA$X <- seq(1, nrow(longPA), 1)
+
+longPA = melt(longPA[longPA$globalPA==2 | longPA$globalPA == 4,], 
+              measure.vars = c("T1_PA", "T2_PA") )
+#looking at the dataframe created, can see that each participant now has a
+# T1_PA, and T2_PA entry (i.e., in long format)
+
+longPA$globalPA = as.factor(longPA$globalPA)
+levels(longPA$globalPA) <- c("a little less positive", "a little more positive") #renaming the levels
+
+plot1 <- ggplot(data = longPA, aes(x = variable, y = value)) + 
+  geom_point(size = 2, color = "black", alpha = 0.3) + #colour points by globalPA
+  geom_path(aes(group = X, alpha = 0.3)) + #spaghetti plot
+  ylab("Mean Positive Affect") +
+  xlab("Time") +
+  theme_bw(base_size = 18) +
+  facet_grid(~ globalPA) +
+  theme(legend.position="none") +
+  scale_x_discrete(labels=c("T1_PA" = "Time 1", "T2_PA" = "Time 2")) +
+  theme(axis.title.x=element_blank(),
+        strip.background =element_rect(fill="white"),
+        panel.grid.major.x = element_blank())
+plot1
+
+#code to save the plot
+#jpeg(file="plot1.jpg",width=2000,height=1400, units = "px", res = 300)
+#plot1
+#dev.off()
+
+#now do the same for NA
+longNA = PANASdata
+# Add a variable for each individual 
+longNA$X <- seq(1, nrow(longNA), 1)
+
+longNA = melt(longNA[longNA$globalNA==2 | longNA$globalNA == 4,], 
+              measure.vars = c("T1_NA", "T2_NA") )
+
+longNA$globalNA = as.factor(longNA$globalNA)
+levels(longNA$globalNA) <- c("a little less negative", "a little more negative") #renaming the levels
+
+plot2 <- ggplot(data = longNA, aes(x = variable, y = value)) + 
+  geom_point(size = 2, color = "black", alpha = 0.3) + #colour points by globalPA
+  geom_path(aes(group = X, alpha = 0.3)) + #spaghetti plot
+  ylab("Mean Negative Affect") +
+  xlab("Time") +
+  theme_bw(base_size = 18) +
+  facet_grid(~ globalNA) +
+  theme(legend.position="none") +
+  scale_x_discrete(labels=c("T1_NA" = "Time 1", "T2_NA" = "Time 2")) +
+  theme(axis.title.x=element_blank(),
+        strip.background =element_rect(fill="white"),
+        panel.grid.major.x = element_blank())
+plot2
+#jpeg(file="plot2.jpg",width=2000,height=1400, units = "px", res = 300)
+#plot2
+#dev.off()
+
+#Save combined plot
+#jpeg(file="plot_grid.jpg",width=2000,height=2400, units = "px", res = 300)
+grid.arrange(plot1, plot2, nrow = 2)
+#dev.off()
+
+```
+
+# Correlations mentioned in the discussion
+
+```{r}
+######### correlations of global Qs, including with individual items
+
+
+# Compare two correlations based on two dependent groups
+# to check whether responses on the global transition question correlate
+# more strongly with current state (i.e., T2 response) or change score
+
+cocor(~PA_change + globalPA | T2_PA + globalPA, PANASdata)
+cocor(~NA_change + globalNA | T2_NA + globalNA, PANASdata)
+
+cocor(~T1_PA + globalPA | T2_PA + globalPA, PANASdata)
+cocor(~T1_NA + globalNA | T2_NA + globalNA, PANASdata)
+
+```
+
